@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin Panel — Baylos</title>
+<link rel="stylesheet" href="styles.css">
+<style>.atabs{display:flex;gap:6px;padding:12px 14px;overflow-x:auto}.atab{padding:8px 14px;border-radius:20px;background:var(--surface-2);font-size:.75rem;font-weight:700;cursor:pointer;white-space:nowrap}.atab.on{background:var(--primary);color:#fff}
+.arow{display:flex;gap:10px;align-items:center;background:var(--surface);padding:10px;border-radius:12px;margin-bottom:8px;box-shadow:var(--shadow)}
+.arow img{width:50px;height:50px;border-radius:10px;object-fit:cover}
+.ainput{display:flex;gap:8px}.ainput>*{flex:1}
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.stat-card{background:var(--surface);border-radius:14px;padding:16px;box-shadow:var(--shadow)}
+.stat-card b{font-size:1.5rem;color:var(--primary);display:block}
+.stat-card small{font-size:.7rem;color:var(--text-dim)}
+.tiny{padding:6px 10px;border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:.75rem}
+</style>
+</head>
+<body>
+<header class="hdr"><div class="hdr-top"><div class="brand">🛠️ <b>Admin Panel</b></div><div class="hdr-ic" onclick="logoutA()">🚪</div></div></header>
+
+<div id="loginView" class="pad" style="max-width:340px;margin:60px auto">
+  <h2 style="text-align:center">🔐 Login Admin</h2>
+  <p style="font-size:.75rem;color:var(--text-dim);text-align:center;margin-bottom:8px">Autentikasi Supabase — aman di server</p>
+  <label>Email Admin</label><input id="emailIn" type="email" onkeydown="if(event.key==='Enter')loginA()">
+  <label>Password</label><input type="password" id="passIn" onkeydown="if(event.key==='Enter')loginA()">
+  <button class="big-btn" onclick="loginA()">Masuk</button>
+</div>
+
+<div id="panelView" style="display:none">
+  <div class="atabs">
+    <div class="atab on" onclick="atab(this,'produk')">📦 Produk</div>
+    <div class="atab" onclick="atab(this,'ongkir')">🚚 Ongkir</div>
+    <div class="atab" onclick="atab(this,'stat')">📊 Analitik</div>
+    <div class="atab" onclick="atab(this,'order')">🧾 Pesanan</div>
+    <div class="atab" onclick="atab(this,'set')">⚙️ Atur Toko</div>
+    <div class="atab" onclick="atab(this,'legal')">📜 Halaman</div>
+  </div>
+  <div id="tabContent" style="padding:0 14px 40px"></div>
+</div>
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ===== ⚙️ ISI SAMA DENGAN script.js =====
+const SB_URL = 'https://txndsvswrukdcydwkyag.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR4bmRzdnN3cnVrZGN5ZHdreWFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5MDQ5ODUsImV4cCI6MjEwNTQ4MDk4NX0.W-rLCdQXYPLdDonhBU8CLIA67hGAIQwgQD7fgDQcqoo';
+const sb = supabase.createClient(SB_URL, SB_KEY);
+
+const $=id=>document.getElementById(id);
+const fmt=n=>'Rp'+Number(n||0).toLocaleString('id-ID');
+const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+function toast(m,ms=2600){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),ms);}
+
+let products=[], vouchers=[], orders=[], zones=[];
+let settings={storeName:"Baylos",storeEmoji:"🛍️",flashTitle:"⚡ Flash Sale!",
+  waNumber:"",csEmail:"",csInstagram:"",csHours:"08.00 - 21.00 WIB",
+  banks:[{bank:"BCA",no:"",an:""}],qrisImg:"",
+  heroTitle:"🔥 Yuk Belanja, Ada Diskon Spesial Hari Ini!",
+  categories:["Semua","Makanan","Minuman","Fashion","Elektronik"],
+  storeLat:"-6.200000",storeLng:"106.816666",
+  ongkirMode:"jarak",ongkirBase:5000,ongkirPerKm:2000,ongkirMaxKm:25,freeShipMin:150000,
+  legal:{}};
+let editId=null, pImgData='', qrisData='';
+
+async function cloudLoad(){
+  try{
+    const [p,s,v,o,z,st] = await Promise.all([
+      sb.from('products').select('*').order('id'),
+      sb.from('settings').select('data').eq('id',1).maybeSingle(),
+      sb.from('vouchers').select('*').order('id'),
+      sb.from('orders').select('*').order('id',{ascending:false}).limit(100),
+      sb.from('zones').select('*').order('id'),
+      sb.from('stats').select('*').order('day',{ascending:false}).limit(7)]);
+    if(p.data) products=p.data.map(x=>({id:x.id,name:x.name,price:x.price,old:x.old_price,stock:x.stock,desc:x.descr,flash:x.flash,img:x.img,cat:x.category||'Umum',weight:x.weight||1}));
+    if(s.data?.data) settings={...settings,...s.data.data,legal:{...settings.legal,...(s.data.data.legal||{})}};
+    if(v.data) vouchers=v.data;
+    if(o.data) orders=o.data;
+    if(z.data) zones=z.data;
+    let daily={};st.data?.forEach(r=>daily[r.day]={visits:r.visits,orders:r.orders});
+    window._daily=daily;
+  }catch(e){toast('⚠️ Koneksi cloud gagal');console.error(e);}
+}
+async function cloudUpload(file,folder){
+  const name=folder+'/'+Date.now()+'_'+file.name.replace(/\s/g,'_');
+  const {error}=await sb.storage.from('media').upload(name,file,{upsert:true});
+  if(error) throw error;
+  return sb.storage.from('media').getPublicUrl(name).data.publicUrl;
+}
+async function cloudSaveSettings(){
+  const {error}=await sb.from('settings').upsert({id:1,data:settings});
+  if(error) toast('❌ Gagal: '+error.message);
+}
+
+// ===== LOGIN SUPABASE AUTH (dicek di server, bukan browser) =====
+async function loginA(){
+  const email=$('emailIn').value.trim(), pass=$('passIn').value;
+  if(!email||!pass){toast('⚠️ Isi email & password');return;}
+  toast('⏳ Memeriksa...');
+  const {error} = await sb.auth.signInWithPassword({email,password:pass});
+  if(error){toast('❌ Email atau password salah');return;}
+  // pastikan user ini terdaftar di tabel admins
+  const {data:{user}} = await sb.auth.getUser();
+  const {data:isAdmin} = await sb.from('admins').select('id').eq('id',user.id).maybeSingle();
+  if(!isAdmin){ await sb.auth.signOut(); toast('🚫 Akun ini bukan admin'); return; }
+  $('loginView').style.display='none';$('panelView').style.display='block';
+  toast('✅ Selamat datang, Admin!');
+  await cloudLoad(); renderTab('produk');
+}
+async function logoutA(){ await sb.auth.signOut(); $('panelView').style.display='none';$('loginView').style.display='block'; }
+
+// cek sesi tersimpan saat halaman dibuka
+sb.auth.getSession().then(async ({data})=>{
+  if(data.session){
+    const {data:isAdmin} = await sb.from('admins').select('id').eq('id',data.session.user.id).maybeSingle();
+    if(isAdmin){ $('loginView').style.display='none';$('panelView').style.display='block';await cloudLoad();renderTab('produk'); }
+  }
+});
+
+function atab(el,t){document.querySelectorAll('.atab').forEach(a=>a.classList.remove('on'));el.classList.add('on');renderTab(t);}
+function renderTab(t){
+  ({produk:renderProduk,ongkir:renderOngkir,stat:renderStat,order:renderOrder,set:renderSet,legal:renderLegal})[t]();
+}
+
+// ===== TAB PRODUK =====
+function renderProduk(){
+  $('tabContent').innerHTML=`
+  <div class="stat-card" style="margin-bottom:14px">
+    <b style="font-size:.9rem" id="formTitle">➕ Tambah Produk</b>
+    <label>Nama Produk</label><input id="pName">
+    <div class="ainput"><div><label>Harga</label><input id="pPrice" type="number"></div>
+    <div><label>Harga Lama (ops.)</label><input id="pOld" type="number"></div></div>
+    <div class="ainput"><div><label>Stok</label><input id="pStock" type="number" value="10"></div>
+    <div><label>Berat (kg)</label><input id="pWeight" type="number" value="1" step="0.1"></div></div>
+    <label>🏷 Kategori</label>
+    <select id="pCat">${(settings.categories||[]).filter(c=>c!=='Semua').map(c=>`<option>${esc(c)}</option>`).join('')}</select>
+    <label>Deskripsi</label><textarea id="pDesc" rows="2"></textarea>
+    <label>📷 Foto Produk (upload cloud)</label><input type="file" id="pImg" accept="image/*" onchange="prevPImg(this)">
+    <img id="pImgPrev" style="display:none;width:100%;max-height:150px;object-fit:cover;border-radius:12px;margin-top:8px">
+    <label style="margin-top:8px"><input type="checkbox" id="pFlash" style="width:auto"> ⚡ Tampilkan di Flash Sale</label>
+    <button class="big-btn" onclick="saveProduct()">💾 Simpan & Tayangkan</button>
+    <button class="big-btn" style="background:var(--text-dim)" onclick="resetForm()">Bersihkan</button>
+  </div>
+  <h4 style="margin-bottom:10px">📦 Daftar Produk (${products.length})</h4>
+  ${products.map(p=>`<div class="arow">
+    ${p.img?`<img src="${p.img}">`:`<div style="width:50px;height:50px;border-radius:10px;background:var(--primary-2);display:flex;align-items:center;justify-content:center">🛍️</div>`}
+    <div style="flex:1"><b style="font-size:.82rem">${esc(p.name)}</b><br><small style="color:var(--text-dim)">🏷 ${esc(p.cat)} · ${fmt(p.price)} · Stok ${p.stock} ${p.flash?'· ⚡':''}</small></div>
+    <div style="display:flex;gap:6px"><button class="tiny" style="background:var(--primary)" onclick="editP(${p.id})">✏️</button>
+    <button class="tiny" style="background:var(--danger)" onclick="delP(${p.id})">🗑</button></div>
+  </div>`).join('')||'<p style="color:var(--text-dim);font-size:.8rem">Belum ada produk</p>'}`;
+}
+async function prevPImg(inp){
+  const f=inp.files[0];if(!f)return;
+  toast('⏳ Upload foto...');
+  try{pImgData=await cloudUpload(f,'produk');}
+  catch(e){toast('❌ Upload gagal (harus login admin)');return;}
+  $('pImgPrev').src=pImgData;$('pImgPrev').style.display='block';toast('✅ Foto terupload');
+}
+async function saveProduct(){
+  if(!$('pName').value||!$('pPrice').value){toast('⚠️ Isi nama & harga');return;}
+  const data={name:$('pName').value,price:+$('pPrice').value,old_price:+$('pOld').value||0,
+    stock:+$('pStock').value||0,weight:+$('pWeight').value||1,category:$('pCat').value,
+    descr:$('pDesc').value,flash:$('pFlash').checked,img:pImgData};
+  toast('⏳ Menyimpan...');
+  try{
+    if(editId) await sb.from('products').update(data).eq('id',editId);
+    else await sb.from('products').insert(data);
+    toast('✅ Tersimpan & tayang realtime!');
+    resetForm();await cloudLoad();renderProduk();
+  }catch(e){toast('❌ Gagal: '+e.message+' — pastikan login admin');}
+}
+function editP(id){const p=products.find(x=>x.id===id);editId=id;
+  $('formTitle').textContent='✏️ Edit Produk';$('pName').value=p.name;$('pPrice').value=p.price;
+  $('pOld').value=p.old||'';$('pStock').value=p.stock;$('pWeight').value=p.weight||1;
+  $('pCat').value=p.cat;$('pDesc').value=p.desc||'';$('pFlash').checked=p.flash;
+  pImgData=p.img||'';if(pImgData){$('pImgPrev').src=pImgData;$('pImgPrev').style.display='block';}window.scrollTo(0,0);}
+async function delP(id){
+  if(!confirm('Hapus produk ini?'))return;
+  await sb.from('products').delete().eq('id',id);
+  await cloudLoad();renderProduk();toast('🗑 Dihapus');
+}
+function resetForm(){editId=null;pImgData='';renderProduk();}
+
+// ===== TAB ONGKIR =====
+function renderOngkir(){
+  $('tabContent').innerHTML=`
+  <div class="stat-card" style="margin-bottom:14px">
+    <b style="font-size:.9rem">🚚 Pengaturan Ongkir Otomatis</b>
+    <label>📍 Lokasi Toko (koordinat GPS)</label>
+    <div class="ainput"><input id="oLat" value="${esc(settings.storeLat)}" placeholder="Latitude">
+    <input id="oLng" value="${esc(settings.storeLng)}" placeholder="Longitude"></div>
+    <button class="big-btn" style="background:var(--success);padding:10px" onclick="useMyGPS()">🎯 Ambil Lokasi Toko dari GPS Saya</button>
+    <label>Mode Ongkir</label>
+    <select id="oMode">
+      <option value="jarak" ${settings.ongkirMode==='jarak'?'selected':''}>📏 Otomatis dari Jarak GPS</option>
+      <option value="zona" ${settings.ongkirMode==='zona'?'selected':''}>🗺️ Zona Tarif (pilih manual)</option>
+    </select>
+    <label>📏 Tarif Dasar (Rp)</label><input id="oBase" type="number" value="${settings.ongkirBase}">
+    <label>📏 Tambahan per Km (Rp)</label><input id="oPerKm" type="number" value="${settings.ongkirPerKm}">
+    <label>📏 Jarak Maksimal Layanan (km)</label><input id="oMax" type="number" value="${settings.ongkirMaxKm}">
+    <label>🎉 Minimal Belanja Gratis Ongkir (0 = nonaktif)</label><input id="oFree" type="number" value="${settings.freeShipMin}">
+    <button class="big-btn" onclick="saveOngkir()">💾 Simpan Ongkir</button>
+  </div>
+  <div class="stat-card">
+    <b style="font-size:.9rem">🗺️ Zona Tarif (mode zona)</b>
+    <div class="ainput" style="margin-top:8px"><input id="zName" placeholder="Nama zona, mis: Dalam Kota">
+    <input id="zKm" type="number" placeholder="km" style="max-width:70px">
+    <input id="zFee" type="number" placeholder="Ongkir Rp" style="max-width:100px">
+    <button class="tiny" style="background:var(--success);padding:10px" onclick="addZone()">➕</button></div>
+    ${zones.map(z=>`<div class="arow"><div style="flex:1"><b style="font-size:.8rem">${esc(z.name)}</b><br><small>≈ ${z.km} km · ${fmt(z.fee)}</small></div>
+    <button class="tiny" style="background:var(--danger)" onclick="delZone(${z.id})">🗑</button></div>`).join('')}
+  </div>`;
+}
+function useMyGPS(){
+  toast('⏳ Mengambil GPS...');
+  navigator.geolocation.getCurrentPosition(pos=>{
+    $('oLat').value=pos.coords.latitude.toFixed(6);
+    $('oLng').value=pos.coords.longitude.toFixed(6);
+    toast('✅ Lokasi toko terisi');
+  },()=>toast('❌ Gagal ambil GPS'),{enableHighAccuracy:true});
+}
+async function saveOngkir(){
+  settings.storeLat=$('oLat').value;settings.storeLng=$('oLng').value;
+  settings.ongkirMode=$('oMode').value;settings.ongkirBase=+$('oBase').value;
+  settings.ongkirPerKm=+$('oPerKm').value;settings.ongkirMaxKm=+$('oMax').value;
+  settings.freeShipMin=+$('oFree').value;
+  toast('⏳ Menyimpan...');await cloudSaveSettings();toast('✅ Ongkir tersimpan');
+}
+async function addZone(){
+  const n=$('zName').value;if(!n){toast('⚠️ Isi nama zona');return;}
+  await sb.from('zones').insert({name:n,km:+$('zKm').value||0,fee:+$('zFee').value||0});
+  await cloudLoad();renderOngkir();toast('✅ Zona ditambah');
+}
+async function delZone(id){await sb.from('zones').delete().eq('id',id);await cloudLoad();renderOngkir();toast('🗑 Zona dihapus');}
+
+// ===== TAB ANALITIK =====
+function renderStat(){
+  const d=window._daily||{};
+  const days=Object.keys(d).sort().reverse();
+  const totV=days.reduce((a,k)=>a+(d[k].visits||0),0), totO=days.reduce((a,k)=>a+(d[k].orders||0),0);
+  $('tabContent').innerHTML=`
+  <div class="stat-grid" style="margin-bottom:14px">
+    <div class="stat-card"><b>${totV}</b><small>👀 Kunjungan (7 hari)</small></div>
+    <div class="stat-card"><b>${totO}</b><small>🧾 Pesanan (7 hari)</small></div>
+    <div class="stat-card"><b>${products.length}</b><small>📦 Total Produk</small></div>
+    <div class="stat-card"><b>${totV?(100*totO/totV).toFixed(1):0}%</b><small>📈 Konversi</small></div>
+  </div>
+  <h4 style="margin-bottom:10px">📅 Harian</h4>
+  ${days.map(k=>`<div class="arow"><div style="flex:1"><b style="font-size:.8rem">${k}</b></div>
+  <small>👀 ${d[k].visits||0}</small><small style="margin-left:12px">🧾 ${d[k].orders||0}</small></div>`).join('')}`;
+}
+
+// ===== TAB PESANAN =====
+function renderOrder(){
+  const baru=orders.filter(o=>o.status==='baru').length;
+  $('tabContent').innerHTML=`
+  <div class="stat-grid" style="margin-bottom:14px">
+    <div class="stat-card"><b>${baru}</b><small>🆕 Menunggu Konfirmasi</small></div>
+    <div class="stat-card"><b>${orders.reduce((a,o)=>a+Number(o.total||0),0)}</b><small>💰 Total Omzet</small></div>
+  </div>
+  ${orders.map(o=>`<div class="arow" style="flex-wrap:wrap">
+    <div style="flex:1;min-width:200px">
+      <b style="font-size:.82rem">${o.kode}</b> <span style="font-size:.65rem;color:${o.status==='baru'?'var(--danger)':'var(--success)'}">● ${o.status}</span><br>
+      <small style="color:var(--text-dim)">${esc(o.uname||'')} · ${esc(o.phone||'')}<br>${esc(o.address||'')}</small>
+      <p style="font-size:.72rem;margin-top:4px">${(o.items||[]).map(i=>esc(i.name)+'×'+i.qty).join(', ')}</p>
+      <b style="font-size:.8rem;color:var(--primary)">${fmt(o.total)}</b> <small style="color:var(--text-dim)">· ${esc(o.bank||'')}</small>
+      ${o.note?`<p style="font-size:.7rem;color:var(--text-dim)">📝 ${esc(o.note)}</p>`:''}
+      ${o.lat?`<a href="https://maps.google.com/?q=${o.lat},${o.lng}" target="_blank" style="font-size:.72rem;color:var(--primary)">🎯 Buka Lokasi</a>`:''}
+      ${o.bukti?`<br><img src="${o.bukti}" style="width:70px;border-radius:8px;margin-top:4px">`:''}
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <a class="tiny" style="background:var(--wa);text-decoration:none;padding:8px;display:inline-block" href="#" onclick="return waOrder('${o.kode}')">💬 WA</a>
+      <button class="tiny" style="background:var(--success)" onclick="setStatus('${o.kode}','selesai')">✅ Selesai</button>
+      <button class="tiny" style="background:var(--danger)" onclick="delOrder('${o.kode}')">🗑</button>
+    </div>
+  </div>`).join('')||'<p style="color:var(--text-dim);font-size:.8rem">Belum ada pesanan</p>'}`;
+}
+function waOrder(kode){
+  const o=orders.find(x=>x.kode===kode);
+  const no=(o.phone||'').replace(/^0/,'62').replace(/[^0-9]/g,'');
+  window.open(`https://wa.me/${no}?text=${encodeURIComponent('Halo '+o.uname+', pesanan '+o.kode+' ('+fmt(o.total)+') sudah kami terima ✅')}`,'_blank');
+  return false;
+}
+async function setStatus(kode,st){
+  await sb.from('orders').update({status:st}).eq('kode',kode);
+  await cloudLoad();renderOrder();toast('✅ Status diperbarui');
+}
+async function delOrder(kode){
+  if(!confirm('Hapus pesanan '+kode+'?'))return;
+  await sb.from('orders').delete().eq('kode',kode);
+  await cloudLoad();renderOrder();toast('🗑 Pesanan dihapus');
+}
+
+// ===== TAB SET TOKO =====
+function renderSet(){
+  $('tabContent').innerHTML=`
+  <div class="stat-card" style="margin-bottom:14px">
+    <b style="font-size:.9rem">🏪 Identitas Toko</b>
+    <label>Nama Toko</label><input id="sName" value="${esc(settings.storeName)}">
+    <label>Emoji Logo</label><input id="sEmoji" value="${esc(settings.storeEmoji)}">
+    <label>Judul Hero (Beranda)</label><input id="sHero" value="${esc(settings.heroTitle)}">
+    <label>Judul Flash Sale</label><input id="sFlash" value="${esc(settings.flashTitle)}">
+    <label>🏷 Kategori (pisahkan dengan koma)</label>
+    <input id="sCats" value="${esc((settings.categories||[]).join(','))}">
+    <label>💬 No. WhatsApp CS (format 62...)</label><input id="sWa" value="${esc(settings.waNumber)}">
+    <label>📸 Instagram CS</label><input id="sIg" value="${esc(settings.csInstagram)}">
+    <label>📧 Email CS</label><input id="sEmail" value="${esc(settings.csEmail)}">
+    <label>🕒 Jam Operasional</label><input id="sHours" value="${esc(settings.csHours)}">
+    <button class="big-btn" onclick="saveStore()">💾 Simpan Pengaturan</button>
+  </div>
+  <div class="stat-card" style="margin-bottom:14px">
+    <b style="font-size:.9rem">🏦 Rekening & QRIS</b>
+    ${(settings.banks||[]).map((b,i)=>`<div class="arow"><div style="flex:1"><b style="font-size:.8rem">${esc(b.bank)}</b><br><small>${esc(b.no)} a/n ${esc(b.an)}</small></div>
+      <button class="tiny" style="background:var(--danger)" onclick="delBank(${i})">🗑</button></div>`).join('')}
+    <label>Bank</label><input id="bBank" placeholder="BCA/BRI/Mandiri">
+    <label>No. Rekening</label><input id="bNo" inputmode="numeric">
+    <label>Atas Nama</label><input id="bAn">
+    <button class="big-btn" style="background:var(--success);padding:10px" onclick="addBank()">➕ Tambah Rekening</button>
+    <label>📱 QRIS (upload gambar)</label><input type="file" id="qFile" accept="image/*" onchange="upQRIS(this)">
+    ${settings.qrisImg?`<img src="${settings.qrisImg}" style="width:100%;max-width:200px;border-radius:10px;margin-top:8px">
+    <button class="big-btn" style="background:var(--danger);padding:10px" onclick="settings.qrisImg='';saveSettingsNow()">🗑 Hapus QRIS</button>`:''}
+  </div>
+  <div class="stat-card">
+    <b style="font-size:.9rem">🎟 Kode Voucher</b>
+    ${vouchers.map(v=>`<div class="arow"><div style="flex:1"><b style="font-size:.8rem">${esc(v.code)}</b> — diskon ${v.disc}%</div>
+      <button class="tiny" style="background:var(--danger)" onclick="delVoucher('${esc(v.code)}')">🗑</button></div>`).join('')}
+    <label>Kode Voucher</label><input id="vCode" placeholder="HEMAT10">
+    <label>Diskon (%)</label><input id="vDisc" type="number" placeholder="10">
+    <button class="big-btn" style="background:var(--success);padding:10px" onclick="addVoucher()">➕ Tambah Voucher</button>
+  </div>`;
+}
+async function saveStore(){
+  settings.storeName=$('sName').value;settings.storeEmoji=$('sEmoji').value;
+  settings.heroTitle=$('sHero').value;settings.flashTitle=$('sFlash').value;
+  settings.categories=$('sCats').value.split(',').map(s=>s.trim()).filter(Boolean);
+  settings.waNumber=$('sWa').value;settings.csInstagram=$('sIg').value;
+  settings.csEmail=$('sEmail').value;settings.csHours=$('sHours').value;
+  toast('⏳ Menyimpan...');await cloudSaveSettings();toast('✅ Pengaturan tersimpan & tayang realtime');
+}
+async function saveSettingsNow(){await cloudSaveSettings();renderSet();toast('✅ Diperbarui');}
+async function addBank(){
+  settings.banks.push({bank:$('bBank').value,no:$('bNo').value,an:$('bAn').value});
+  await cloudSaveSettings();renderSet();toast('✅ Rekening ditambah');
+}
+async function delBank(i){settings.banks.splice(i,1);await cloudSaveSettings();renderSet();toast('🗑 Rekening dihapus');}
+async function upQRIS(inp){
+  const f=inp.files[0];if(!f)return;
+  toast('⏳ Upload QRIS...');
+  try{settings.qrisImg=await cloudUpload(f,'qris');await cloudSaveSettings();renderSet();toast('✅ QRIS tayang');}
+  catch(e){toast('❌ Upload gagal');}
+}
+async function addVoucher(){
+  const c=$('vCode').value.trim().toUpperCase();
+  if(!c||!$('vDisc').value){toast('⚠️ Lengkapi kode & diskon');return;}
+  await sb.from('vouchers').insert({code:c,disc:+$('vDisc').value});
+  await cloudLoad();renderSet();toast('✅ Voucher ditambah');
+}
+async function delVoucher(code){await sb.from('vouchers').delete().eq('code',code);await cloudLoad();renderSet();toast('🗑 Voucher dihapus');}
+
+// ===== TAB HALAMAN LEGAL =====
+function renderLegal(){
+  const L=settings.legal||{};
+  $('tabContent').innerHTML=`
+  <div class="stat-card" style="margin-bottom:14px">
+    <b style="font-size:.9rem">📜 Isi Halaman Legal (kosong = pakai template bawaan)</b>
+    <label>Syarat & Ketentuan</label><textarea id="lSyarat" rows="4">${esc(L.syarat||'')}</textarea>
+    <label>Kebijakan Privasi</label><textarea id="lPrivasi" rows="4">${esc(L.privasi||'')}</textarea>
+    <label>FAQ</label><textarea id="lFaq" rows="4">${esc(L.faq||'')}</textarea>
+    <label>Kebijakan Retur & Garansi</label><textarea id="lGaransi" rows="4">${esc(L.garansi||'')}</textarea>
+    <button class="big-btn" onclick="saveLegal()">💾 Simpan Halaman</button>
+  </div>`;
+}
+async function saveLegal(){
+  settings.legal={syarat:$('lSyarat').value,privasi:$('lPrivasi').value,faq:$('lFaq').value,garansi:$('lGaransi').value};
+  toast('⏳ Menyimpan...');await cloudSaveSettings();toast('✅ Halaman tersimpan');
+}
+</script>
+</body>
+</html>
