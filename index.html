@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Tokoku — Belanja Mudah</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="hdr">
+  <div class="hdr-top">
+    <div class="brand"><span id="hEmoji">🛍️</span> <b id="hName">Tokoku</b></div>
+    <div class="hdr-ic" onclick="openSearch()">🔍</div>
+  </div>
+  <div class="search-wrap" id="searchWrap" style="display:none">
+    <input id="searchInput" placeholder="Cari produk..." oninput="renderHome()">
+  </div>
+  <div class="cats" id="catBar"></div>
+  <div class="flash" id="flashBar" onclick="nav('flash')">⚡ <span id="flashText">Flash Sale!</span> ›</div>
+</header>
+
+<main id="content"></main>
+
+<a class="wa-float" href="#" onclick="return csChat()">💬<span>Chat CS</span></a>
+<a class="call-float" href="#" onclick="return callStore()" title="Telepon Toko">📞</a>
+
+<nav class="bnav">
+  <div class="bnav-i active" id="nav-home" onclick="nav('home')">🏠<span>Home</span></div>
+  <div class="bnav-i" id="nav-flash" onclick="nav('flash')">⚡<span>Flash</span></div>
+  <div class="bnav-i" id="nav-cart" onclick="nav('cart')">🛒<span>Keranjang<span class="badge" id="cartBadge">0</span></span></div>
+  <div class="bnav-i" id="nav-profile" onclick="nav('profile')">👤<span>Akun</span></div>
+</nav>
+
+<!-- MODAL CHECKOUT -->
+<div class="modal" id="detailModal">
+  <div class="modal-box">
+    <div class="modal-hd"><b id="detailTitle">Detail</b><span onclick="closeModal('detailModal')">✕</span></div>
+    <div id="detailContent"></div>
+  </div>
+</div>
+
+<!-- MODAL PRODUK -->
+<div class="modal" id="productModal">
+  <div class="modal-box">
+    <div class="modal-hd"><b>Detail Produk</b><span onclick="closeModal('productModal')">✕</span></div>
+    <div id="productContent"></div>
+  </div>
+</div>
+
+<!-- MODAL ALAMAT -->
+<div class="modal" id="addrModal">
+  <div class="modal-box">
+    <div class="modal-hd"><b>📍 Alamat Pengiriman</b><span onclick="closeModal('addrModal')">✕</span></div>
+    <div class="pad">
+      <label>Nama Penerima</label><input id="addrName">
+      <label>No. HP</label><input id="addrPhone" inputmode="numeric">
+      <label>Alamat Lengkap</label><textarea id="addrText" rows="3"></textarea>
+      <label>Patokan / Catatan (opsional)</label><input id="addrNote" placeholder="Contoh: rumah pagar hijau sebelah masjid">
+      <button class="big-btn" onclick="useGPS()">🎯 Ambil Lokasi GPS (Ongkir Otomatis)</button>
+      <p id="gpsStatus" style="font-size:.72rem;color:var(--text-dim);margin-top:8px"></p>
+      <button class="big-btn" onclick="saveAddr()">💾 Simpan Alamat</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL BUKTI TRANSFER -->
+<div class="modal" id="buktiModal">
+  <div class="modal-box">
+    <div class="modal-hd"><b>📤 Upload Bukti Transfer</b><span onclick="closeModal('buktiModal')">✕</span></div>
+    <div class="pad">
+      <div class="cs-hours" style="margin-bottom:12px">🏦 Transfer ke: <b id="buktiBank">-</b></div>
+      <label>Screenshot Bukti Transfer</label>
+      <input type="file" id="buktiFile" accept="image/*" onchange="previewBukti(this)">
+      <img id="buktiPreview" style="display:none;width:100%;border-radius:12px;margin-top:10px">
+      <button class="big-btn" id="buktiBtn" disabled onclick="submitBukti()">✅ Kirim Pesanan</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL SUKSES -->
+<div class="modal" id="successModal">
+  <div class="modal-box" style="text-align:center">
+    <div class="pad">
+      <div style="font-size:4rem">🎉</div>
+      <h3>Pesanan Terkirim!</h3>
+      <p id="successMsg" style="font-size:.85rem;color:var(--text-dim)"></p>
+      <button class="big-btn" onclick="closeModal('successModal');renderCart()">OK</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="script.js"></script>
+</body>
+</html>
